@@ -24,7 +24,9 @@ class DroneLidarNavEnv(Node, gym.Env):
         
         # Publishers
         self.cmd_pub = self.create_publisher(Twist, '/simple_drone/cmd_vel', 10)
+        # publisher kept for fallback if keypress emulation fails
         self.takeoff_pub = self.create_publisher(Empty, '/simple_drone/takeoff', 10)
+        self.drone_namespace = '/simple_drone'
         
         # Gazebo services for physics control and reset
         self.pause = self.create_client(EmptyService, "/pause_physics")
@@ -140,10 +142,30 @@ class DroneLidarNavEnv(Node, gym.Env):
         return obs, info
     
     def takeoff(self):
-        """Mimic pressing ``T`` in the teleop window to take off."""
+        """Emulate pressing ``T`` in the teleop window to take off."""
+        import subprocess
         from std_msgs.msg import Empty
-        self.get_logger().info("Sending teleop takeoff command...")
-        self.takeoff_pub.publish(Empty())
+
+        self.get_logger().info("Emulating teleop takeoff keypress...")
+
+        # Try to send the key press to the teleop xterm using xdotool. If this
+        # fails (e.g., xdotool not installed or no X server), fall back to
+        # publishing directly on the takeoff topic.
+        sent = False
+        try:
+            search = subprocess.run(
+                ["xdotool", "search", "--name", "teleop"],
+                capture_output=True, text=True, check=True
+            )
+            window_id = search.stdout.splitlines()[0]
+            subprocess.run(["xdotool", "windowactivate", "--sync", window_id], check=True)
+            subprocess.run(["xdotool", "key", "--window", window_id, "t"], check=True)
+            sent = True
+        except Exception as e:
+            self.get_logger().warning(f"xdotool failed: {e}; using topic publish instead")
+
+        if not sent:
+            self.takeoff_pub.publish(Empty())
 
         start_time = time.time()
         while time.time() - start_time < 10.0:
