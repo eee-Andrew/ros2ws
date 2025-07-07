@@ -140,10 +140,20 @@ class DroneLidarNavEnv(Node, gym.Env):
         return obs, info
     
     def takeoff(self):
+        """Mimic pressing ``T`` in the teleop window to take off."""
         from std_msgs.msg import Empty
-        self.get_logger().info("Publishing takeoff command...")
+        self.get_logger().info("Sending teleop takeoff command...")
         self.takeoff_pub.publish(Empty())
-        time.sleep(2.0)
+
+        start_time = time.time()
+        while time.time() - start_time < 10.0:
+            rclpy.spin_once(self, timeout_sec=0.1)
+            if self.current_position[2] >= TAKEOFF_ALTITUDE:
+                break
+            time.sleep(0.1)
+
+        # Small delay to let the drone stabilize
+        time.sleep(1.0)
 
     def _pause_physics(self):
         while not self.pause.wait_for_service(timeout_sec=1.0):
