@@ -5,6 +5,7 @@ import time
 import numpy as np
 import torch
 import os
+from torch.utils.tensorboard import SummaryWriter
 from kineza_DroneLidarNavEnv_v2 import DroneLidarNavEnv  
 from Kineza_SDDPG import SDDPG  # Fixed import name
 
@@ -64,11 +65,14 @@ def main():
     
     max_episodes = 1000
     max_steps = 600
-    batch_size = 32 
+    batch_size = 64
+    update_every = 64
     save_path = "./sddpg_checkpoints"
     os.makedirs(save_path, exist_ok=True)
+    writer = SummaryWriter(log_dir="sddpg_tensorboard")
     
     rewards_log = []
+    step_count = 0
     for episode in range(max_episodes):
         obs, info = env.reset()
         episode_reward = 0
@@ -80,16 +84,20 @@ def main():
             agent.replay_buffer.push((obs, action, reward, next_obs, float(done)))
             obs = next_obs
             episode_reward += reward
-            agent.update(batch_size)
+            step_count += 1
+            if step_count % update_every == 0:
+                agent.update(batch_size)
             if done:
                 break
         
         rewards_log.append(episode_reward)
+        writer.add_scalar('Train/EpisodeReward', episode_reward, episode)
         print(f"Episode {episode + 1}: Reward = {episode_reward:.2f}, Epsilon = {agent.epsilon:.3f}")
         
         # Evaluate policy every 20 episodes
         if (episode + 1) % 20 == 0:
             avg_eval = evaluate_policy(env, agent)
+            writer.add_scalar('Eval/AvgReward', avg_eval, episode)
         
         # Save model every 50 episodes
         if (episode + 1) % 50 == 0:
@@ -100,10 +108,9 @@ def main():
     torch.save(agent.actor.state_dict(), os.path.join(save_path, "actor_final.pth"))
     torch.save(agent.critic.state_dict(), os.path.join(save_path, "critic_final.pth"))
     print("Training complete. Final model saved.")
+    writer.close()
     env.close()
     rclpy.shutdown()
-
-r_step = -5.0  # as in the paper
 
 if __name__ == "__main__":
     main()
