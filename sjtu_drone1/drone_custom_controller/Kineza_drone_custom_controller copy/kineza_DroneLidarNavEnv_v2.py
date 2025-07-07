@@ -16,6 +16,7 @@ GOAL_POS = np.array([5.0, 5.0, 5.0])
 COLLISION_THRESHOLD = 0.01
 NEAR_OBSTACLE_THRESHOLD = 0.5
 TAKEOFF_ALTITUDE = 0.8
+MAX_ALTITUDE = 2.0  # custom altitude ceiling
 MAX_DISTANCE = 10.0
 
 class DroneLidarNavEnv(Node, gym.Env):
@@ -263,6 +264,10 @@ class DroneLidarNavEnv(Node, gym.Env):
             truncated = True
             reward -= 50.0
             self.get_logger().info("Obstacle too close, restarting episode")
+
+        if self.current_position[2] > MAX_ALTITUDE:
+            truncated = True
+            self.get_logger().info("Altitude limit exceeded, restarting episode")
 
         if self.current_episode_time >= self.episode_time_limit:
             truncated = True
