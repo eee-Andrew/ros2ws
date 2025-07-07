@@ -130,7 +130,7 @@ class DroneLidarNavEnv(Node, gym.Env):
         from std_msgs.msg import Empty
         self.get_logger().info("Publishing takeoff command...")
         self.takeoff_pub.publish(Empty())
-        rclpy.sleep(2)
+        time.sleep(2.0)
 
     def _pause_physics(self):
         while not self.pause.wait_for_service(timeout_sec=1.0):
