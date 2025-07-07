@@ -263,7 +263,8 @@ def compute_r_tag(prev_pos, curr_pos, goal_pos, d0=10.0):
         return -30.0
     else:
         delta = d_prev - d_curr
-        return delta * np.exp(0.05 * abs(delta))
+        # Equation (11) in the referenced paper
+        return delta * np.exp(0.05 * delta)
 
 def compute_r_obs(lidar_data, sigma=50.0, Dr=100.0):
     d = np.min(lidar_data)
