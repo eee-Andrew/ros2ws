@@ -13,6 +13,7 @@ import time
 
 GOAL_POS = np.array([5.0, 5.0, 5.0])
 COLLISION_THRESHOLD = 0.01
+NEAR_OBSTACLE_THRESHOLD = 0.5
 MAX_DISTANCE = 10.0
 
 class DroneLidarNavEnv(Node, gym.Env):
@@ -204,6 +205,12 @@ class DroneLidarNavEnv(Node, gym.Env):
         reward = r_tag + r_obs + r_step
         # ---------------------------------------
 
+
+        if np.min(self.lidar_data) < NEAR_OBSTACLE_THRESHOLD:
+            truncated = True
+            reward -= 50.0
+            self.get_logger().info("Obstacle too close, restarting episode")
+
         if self.current_episode_time >= self.episode_time_limit:
             truncated = True
             reward -= 10.0
@@ -263,7 +270,8 @@ def compute_r_tag(prev_pos, curr_pos, goal_pos, d0=10.0):
         return -30.0
     else:
         delta = d_prev - d_curr
-        return delta * np.exp(0.05 * abs(delta))
+        # Equation (11) in the referenced paper
+        return delta * np.exp(0.05 * delta)
 
 def compute_r_obs(lidar_data, sigma=50.0, Dr=100.0):
     d = np.min(lidar_data)
