@@ -14,6 +14,7 @@ import time
 GOAL_POS = np.array([5.0, 5.0, 5.0])
 COLLISION_THRESHOLD = 0.01
 NEAR_OBSTACLE_THRESHOLD = 0.5
+TAKEOFF_ALTITUDE = 0.8
 MAX_DISTANCE = 10.0
 
 class DroneLidarNavEnv(Node, gym.Env):
@@ -75,6 +76,8 @@ class DroneLidarNavEnv(Node, gym.Env):
         
         # Whether to delete and spawn drone on reset
         self.manage_spawn = False  # Set True if you want this env to spawn/delete drone
+        # Enable near-obstacle reset only after takeoff
+        self.near_obs_check_enabled = False
 
     def scan_callback(self, msg):
         if len(msg.ranges) >= 12:
@@ -120,10 +123,18 @@ class DroneLidarNavEnv(Node, gym.Env):
         self._delete_and_respawn_drone()
         
         self._unpause_physics()
-        
+
         self._wait_for_data()
         time.sleep(1.0)
-        
+
+        self.takeoff()
+        start = time.time()
+        while time.time() - start < 3.0 and self.current_position[2] < TAKEOFF_ALTITUDE:
+            rclpy.spin_once(self, timeout_sec=0.1)
+            time.sleep(0.1)
+
+        self.near_obs_check_enabled = True
+
         obs = self.get_obs()
         info = {"episode_time": self.current_episode_time}
         return obs, info
@@ -205,8 +216,11 @@ class DroneLidarNavEnv(Node, gym.Env):
         reward = r_tag + r_obs + r_step
         # ---------------------------------------
 
+        if not self.near_obs_check_enabled and self.current_position[2] > TAKEOFF_ALTITUDE:
+            self.near_obs_check_enabled = True
 
-        if np.min(self.lidar_data) < NEAR_OBSTACLE_THRESHOLD:
+
+        if self.near_obs_check_enabled and np.min(self.lidar_data) < NEAR_OBSTACLE_THRESHOLD:
             truncated = True
             reward -= 50.0
             self.get_logger().info("Obstacle too close, restarting episode")
