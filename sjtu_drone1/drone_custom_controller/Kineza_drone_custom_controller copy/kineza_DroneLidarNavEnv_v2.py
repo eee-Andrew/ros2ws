@@ -10,6 +10,7 @@ from gazebo_msgs.msg import ModelStates
 from gazebo_msgs.srv import DeleteEntity, SpawnEntity
 from std_srvs.srv import Empty as EmptyService
 import time
+import shutil
 
 GOAL_POS = np.array([5.0, 5.0, 5.0])
 COLLISION_THRESHOLD = 0.01
@@ -153,25 +154,31 @@ class DroneLidarNavEnv(Node, gym.Env):
         # publishing directly on the takeoff topic.
         sent = False
         try:
-            search = subprocess.run(
-                ["xdotool", "search", "--name", "teleop"],
-                capture_output=True, text=True, check=True
-            )
-            window_id = search.stdout.splitlines()[0]
-            subprocess.run(["xdotool", "windowactivate", "--sync", window_id], check=True)
-            subprocess.run(["xdotool", "key", "--window", window_id, "t"], check=True)
-            sent = True
+            if shutil.which("xdotool"):
+                search = subprocess.run([
+                    "xdotool", "search", "--name", "teleop"
+                ], capture_output=True, text=True, check=True)
+                window_id = search.stdout.splitlines()[0]
+                subprocess.run(["xdotool", "windowactivate", "--sync", window_id], check=True)
+                subprocess.run(["xdotool", "key", "--window", window_id, "t"], check=True)
+                sent = True
+            else:
+                raise FileNotFoundError("xdotool not found")
         except Exception as e:
-            self.get_logger().warning(f"xdotool failed: {e}; using topic publish instead")
+            self.get_logger().warning(f"xdotool failed: {e}; falling back to takeoff topic")
 
         if not sent:
-            self.takeoff_pub.publish(Empty())
+            for _ in range(3):
+                self.takeoff_pub.publish(Empty())
+                time.sleep(0.5)
 
         start_time = time.time()
         while time.time() - start_time < 10.0:
             rclpy.spin_once(self, timeout_sec=0.1)
             if self.current_position[2] >= TAKEOFF_ALTITUDE:
                 break
+            if not sent:
+                self.takeoff_pub.publish(Empty())
             time.sleep(0.1)
 
         # Small delay to let the drone stabilize
